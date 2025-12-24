@@ -1,23 +1,32 @@
 [package]
+name = "x64"
+version = "0.16.0"
+edition = "2021"
+rust-version = "1.70"
 authors = [
+    # Original x86_64 crate authors - thank you for your incredible work!
+    "Philipp Oppermann <dev@phil-opp.com>",
     "Gerd Zellweger <mail@gerdzellweger.com>",
     "Eric Kidd <git@randomhacks.net>",
-    "Philipp Oppermann <dev@phil-opp.com>",
     "Dan Schatzberg <schatzberg.dan@gmail.com>",
     "John Ericson <John_Ericson@Yahoo.com>",
     "Rex Lunae <rexlunae@gmail.com>",
+    # LA57 support added by:
+    "LunaOS Contributors",
 ]
-description = "Support for x86_64 specific instructions, registers, and structures."
-documentation = "https://docs.rs/x86_64"
-keywords = ["amd64", "x86", "x86_64", "no_std"]
-categories = ["no-std"]
-license = "MIT/Apache-2.0"
-name = "x86_64"
+description = "x86_64 support with LA57 (5-level paging) for 57-bit virtual addresses"
+documentation = "https://docs.rs/x64"
+homepage = "https://github.com/artst3in/x64"
+repository = "https://github.com/artst3in/x64"
+keywords = ["amd64", "x86", "x86_64", "no_std", "la57", "paging"]
+categories = ["no-std", "hardware-support", "os"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/rust-osdev/x86_64"
-version = "0.15.4"
-edition = "2018"
-rust-version = "1.59" # Needed to support inline asm and default const generics
+
+# This crate is a fork of rust-osdev/x86_64 with LA57 (5-level paging) support.
+# Original: https://github.com/rust-osdev/x86_64
+# We are deeply grateful to Philipp Oppermann and all contributors for their
+# foundational work on OS development in Rust.
 
 [dependencies]
 bit_field = "0.10.1"
@@ -42,16 +51,6 @@ doc_auto_cfg = []
 
 [package.metadata.docs.rs]
 all-features = true
-
-[package.metadata.release]
-dev-version = false
-pre-release-replacements = [
-    { file = "Changelog.md", search = "# Unreleased", replace = "# Unreleased\n\n# {{version}} – {{date}}", exactly = 1 },
-]
-pre-release-commit-message = "Bump version to {{version}}"
-push = false
-publish = false
-tag = false
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

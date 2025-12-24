@@ -1,12 +1,16 @@
 //! Physical and virtual addresses manipulation
+//!
+//! This module provides LA57 (5-level paging) support for virtual addresses.
+//! Use [`enable_la57_mode`] during boot after confirming CR4.LA57 is set.
 
 use core::convert::TryFrom;
 use core::fmt;
 #[cfg(feature = "step_trait")]
 use core::iter::Step;
 use core::ops::{Add, AddAssign, Sub, SubAssign};
+use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "memory_encryption")]
-use core::sync::atomic::Ordering;
+use core::sync::atomic::Ordering as MemOrdering;
 
 #[cfg(feature = "memory_encryption")]
 use crate::structures::mem_encrypt::ENC_BIT_MASK;
@@ -16,7 +20,62 @@ use crate::structures::paging::{PageOffset, PageTableIndex};
 use bit_field::BitField;
 use dep_const_fn::const_fn;
 
+// =============================================================================
+// LA57 (5-Level Paging) Support
+// =============================================================================
+
+/// Global flag indicating LA57 mode is active.
+///
+/// When enabled, virtual addresses use 57-bit canonical form instead of 48-bit.
+/// Set this during early boot after checking CR4.LA57.
+pub static LA57_ENABLED: AtomicBool = AtomicBool::new(false);
+
+/// Enable LA57 mode for 57-bit virtual address validation.
+///
+/// Call this during boot after confirming CR4.LA57 = 1.
+/// When enabled:
+/// - Virtual addresses use bits 0-56 (57-bit)
+/// - Canonical form requires bits 57-63 to be copies of bit 56
+#[inline]
+pub fn enable_la57_mode() {
+    LA57_ENABLED.store(true, Ordering::SeqCst);
+}
+
+/// Disable LA57 mode (default 4-level paging with 48-bit addresses).
+#[inline]
+pub fn disable_la57_mode() {
+    LA57_ENABLED.store(false, Ordering::SeqCst);
+}
+
+/// Check if LA57 mode is enabled.
+#[inline]
+pub fn is_la57_mode() -> bool {
+    LA57_ENABLED.load(Ordering::SeqCst)
+}
+
+/// Canonicalizes a virtual address based on current paging mode.
+///
+/// - 4-level paging: sign-extend from bit 47
+/// - 5-level paging (LA57): sign-extend from bit 56
+#[inline]
+fn canonicalize(addr: u64) -> u64 {
+    if is_la57_mode() {
+        // 5-level paging: sign-extend from bit 56
+        ((addr << 7) as i64 >> 7) as u64
+    } else {
+        // 4-level paging: sign-extend from bit 47
+        ((addr << 16) as i64 >> 16) as u64
+    }
+}
+
+/// Canonicalizes a virtual address assuming 4-level paging (for const contexts).
+#[inline]
+const fn canonicalize_48bit(addr: u64) -> u64 {
+    ((addr << 16) as i64 >> 16) as u64
+}
+
 const ADDRESS_SPACE_SIZE: u64 = 0x1_0000_0000_0000;
+const ADDRESS_SPACE_SIZE_LA57: u64 = 0x100_0000_0000_0000;
 
 /// A canonical 64-bit virtual memory address.
 ///
@@ -25,9 +84,15 @@ const ADDRESS_SPACE_SIZE: u64 = 0x1_0000_0000_0000;
 /// [`TryFrom`](https://doc.rust-lang.org/std/convert/trait.TryFrom.html) trait can be used for performing conversions
 /// between `u64` and `usize`.
 ///
-/// On `x86_64`, only the 48 lower bits of a virtual address can be used. The top 16 bits need
-/// to be copies of bit 47, i.e. the most significant bit. Addresses that fulfil this criterion
-/// are called “canonical”. This type guarantees that it always represents a canonical address.
+/// ## Canonical Address Rules
+///
+/// - **4-level paging (default)**: Only bits 0-47 are used. Bits 48-63 must be copies of bit 47.
+/// - **5-level paging (LA57)**: Only bits 0-56 are used. Bits 57-63 must be copies of bit 56.
+///
+/// Call [`enable_la57_mode`] during boot after confirming CR4.LA57 is set to enable
+/// 57-bit address validation.
+///
+/// This type guarantees that it always represents a canonical address for the current mode.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct VirtAddr(u64);
@@ -71,12 +136,30 @@ impl VirtAddr {
     ///
     /// ## Panics
     ///
-    /// This function panics if the bits in the range 48 to 64 are invalid
-    /// (i.e. are not a proper sign extension of bit 47).
+    /// This function panics if the address is not canonical for the current paging mode:
+    /// - 4-level paging: bits 48-63 must be sign-extended from bit 47
+    /// - 5-level paging (LA57): bits 57-63 must be sign-extended from bit 56
     #[inline]
-    pub const fn new(addr: u64) -> VirtAddr {
-        // TODO: Replace with .ok().expect(msg) when that works on stable.
+    pub fn new(addr: u64) -> VirtAddr {
         match Self::try_new(addr) {
+            Ok(v) => v,
+            Err(_) => {
+                if is_la57_mode() {
+                    panic!("virtual address must be sign extended in bits 57 to 64 (LA57 mode)")
+                } else {
+                    panic!("virtual address must be sign extended in bits 48 to 64")
+                }
+            }
+        }
+    }
+
+    /// Creates a new canonical virtual address (const version, assumes 4-level paging).
+    ///
+    /// Use this in const contexts where LA57 detection isn't available.
+    /// For runtime use with LA57 support, use [`new`](Self::new).
+    #[inline]
+    pub const fn new_const(addr: u64) -> VirtAddr {
+        match Self::try_new_const(addr) {
             Ok(v) => v,
             Err(_) => panic!("virtual address must be sign extended in bits 48 to 64"),
         }
@@ -84,13 +167,22 @@ impl VirtAddr {
 
     /// Tries to create a new canonical virtual address.
     ///
-    /// This function checks wether the given address is canonical
-    /// and returns an error otherwise. An address is canonical
-    /// if bits 48 to 64 are a correct sign
-    /// extension (i.e. copies of bit 47).
+    /// This function checks whether the given address is canonical for the
+    /// current paging mode and returns an error otherwise.
     #[inline]
-    pub const fn try_new(addr: u64) -> Result<VirtAddr, VirtAddrNotValid> {
-        let v = Self::new_truncate(addr);
+    pub fn try_new(addr: u64) -> Result<VirtAddr, VirtAddrNotValid> {
+        let canonical = canonicalize(addr);
+        if canonical == addr {
+            Ok(VirtAddr(addr))
+        } else {
+            Err(VirtAddrNotValid(addr))
+        }
+    }
+
+    /// Tries to create a new canonical virtual address (const version, assumes 4-level paging).
+    #[inline]
+    pub const fn try_new_const(addr: u64) -> Result<VirtAddr, VirtAddrNotValid> {
+        let v = Self::new_truncate_const(addr);
         if v.0 == addr {
             Ok(v)
         } else {
@@ -98,16 +190,25 @@ impl VirtAddr {
         }
     }
 
-    /// Creates a new canonical virtual address, throwing out bits 48..64.
+    /// Creates a new canonical virtual address by truncating non-canonical bits.
     ///
-    /// This function performs sign extension of bit 47 to make the address
-    /// canonical, overwriting bits 48 to 64. If you want to check whether an
-    /// address is canonical, use [`new`](Self::new) or [`try_new`](Self::try_new).
+    /// This function performs sign extension based on the current paging mode:
+    /// - 4-level paging: sign-extend from bit 47
+    /// - 5-level paging (LA57): sign-extend from bit 56
     #[inline]
-    pub const fn new_truncate(addr: u64) -> VirtAddr {
+    pub fn new_truncate(addr: u64) -> VirtAddr {
+        VirtAddr(canonicalize(addr))
+    }
+
+    /// Creates a new canonical virtual address (const version, assumes 4-level paging).
+    ///
+    /// Use this in const contexts. For runtime use with LA57 support, use
+    /// [`new_truncate`](Self::new_truncate).
+    #[inline]
+    pub const fn new_truncate_const(addr: u64) -> VirtAddr {
         // By doing the right shift as a signed operation (on a i64), it will
         // sign extend the value, repeating the leftmost bit.
-        VirtAddr(((addr << 16) as i64 >> 16) as u64)
+        VirtAddr(canonicalize_48bit(addr))
     }
 
     /// Creates a new virtual address, without any checks.
@@ -237,6 +338,14 @@ impl VirtAddr {
     #[inline]
     pub const fn p4_index(self) -> PageTableIndex {
         PageTableIndex::new_truncate((self.0 >> 12 >> 9 >> 9 >> 9) as u16)
+    }
+
+    /// Returns the 9-bit level 5 page table index (LA57 only).
+    ///
+    /// This index is only meaningful when 5-level paging (LA57) is enabled.
+    #[inline]
+    pub const fn p5_index(self) -> PageTableIndex {
+        PageTableIndex::new_truncate((self.0 >> 12 >> 9 >> 9 >> 9 >> 9) as u16)
     }
 
     /// Returns the 9-bit level page table index.

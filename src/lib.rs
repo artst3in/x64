@@ -1,5 +1,40 @@
-//! This crate provides x86_64 specific functions and data structures,
-//! and access to various system registers.
+//! # x64
+//!
+//! x86_64 support with **LA57 (5-level paging)** for 57-bit virtual addresses.
+//!
+//! This crate is a fork of the excellent [rust-osdev/x86_64](https://github.com/rust-osdev/x86_64)
+//! crate, adding runtime support for 5-level paging (LA57) which enables 57-bit virtual addresses
+//! and up to 128 PB of addressable memory.
+//!
+//! ## The Problem
+//!
+//! The upstream x86_64 crate (as of 0.15.x) has hardcoded 48-bit canonical address validation.
+//! When LA57 is enabled in CR4, addresses like `0x0000_8000_0000_0000` are perfectly valid
+//! (bit 56 is the sign bit, not bit 47), but the crate rejects them:
+//!
+//! ```text
+//! panicked at 'virtual address must be sign extended in bits 48 to 64'
+//! ```
+//!
+//! ## The Solution
+//!
+//! This crate provides runtime detection of the paging mode:
+//!
+//! ```ignore
+//! use x64::{VirtAddr, addr::{enable_la57_mode, is_la57_mode}};
+//!
+//! // During early boot, after enabling LA57 in CR4:
+//! enable_la57_mode();
+//!
+//! // Now addresses work correctly for 5-level paging:
+//! let addr = VirtAddr::new(0x0000_8000_0000_0000);  // Works in LA57!
+//! ```
+//!
+//! ## Credits
+//!
+//! This crate builds on the incredible work of [Philipp Oppermann](https://github.com/phil-opp)
+//! and all contributors to the [rust-osdev/x86_64](https://github.com/rust-osdev/x86_64) project.
+//! We are deeply grateful for their foundational contributions to OS development in Rust.
 
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(feature = "abi_x86_interrupt", feature(abi_x86_interrupt))]
@@ -9,7 +44,12 @@
 #![deny(missing_debug_implementations)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-pub use crate::addr::{align_down, align_up, PhysAddr, VirtAddr};
+// Core address types and LA57 support
+pub use crate::addr::{
+    align_down, align_up,
+    enable_la57_mode, disable_la57_mode, is_la57_mode, LA57_ENABLED,
+    PhysAddr, VirtAddr,
+};
 
 pub mod addr;
 pub mod instructions;
