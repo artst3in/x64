@@ -208,7 +208,7 @@ impl Page<Size1GiB> {
         let mut addr = 0;
         addr |= p4_index.into_u64() << 39;
         addr |= p3_index.into_u64() << 30;
-        Page::containing_address(VirtAddr::new_truncate(addr))
+        Page::containing_address(VirtAddr::new_truncate_const(addr))
     }
 }
 
@@ -225,7 +225,7 @@ impl Page<Size2MiB> {
         addr |= p4_index.into_u64() << 39;
         addr |= p3_index.into_u64() << 30;
         addr |= p2_index.into_u64() << 21;
-        Page::containing_address(VirtAddr::new_truncate(addr))
+        Page::containing_address(VirtAddr::new_truncate_const(addr))
     }
 }
 
@@ -244,7 +244,7 @@ impl Page<Size4KiB> {
         addr |= p3_index.into_u64() << 30;
         addr |= p2_index.into_u64() << 21;
         addr |= p1_index.into_u64() << 12;
-        Page::containing_address(VirtAddr::new_truncate(addr))
+        Page::containing_address(VirtAddr::new_truncate_const(addr))
     }
 
     /// Returns the level 1 page table index of this page.

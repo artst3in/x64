@@ -292,7 +292,7 @@ impl VirtAddr {
     /// See the `align_down` function for more information.
     #[inline]
     pub(crate) const fn align_down_u64(self, align: u64) -> Self {
-        VirtAddr::new_truncate(align_down(self.0, align))
+        VirtAddr::new_truncate_const(align_down(self.0, align))
     }
 
     /// Checks whether the virtual address has the demanded alignment.
