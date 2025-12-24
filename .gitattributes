@@ -1,0 +1,4 @@
+# Language detection for GitHub
+*.rs linguist-language=Rust
+scripts/*.py linguist-detectable=false
+Cargo.lock linguist-generated=true
