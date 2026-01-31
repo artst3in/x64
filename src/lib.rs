@@ -46,9 +46,8 @@
 
 // Core address types and LA57 support
 pub use crate::addr::{
-    align_down, align_up,
-    enable_la57_mode, disable_la57_mode, is_la57_mode, LA57_ENABLED,
-    PhysAddr, VirtAddr,
+    align_down, align_up, disable_la57_mode, enable_la57_mode, is_la57_mode, PhysAddr, VirtAddr,
+    LA57_ENABLED,
 };
 
 pub mod addr;

@@ -1,6 +1,6 @@
 #![cfg(target_pointer_width = "64")]
 
-use crate::structures::paging::{mapper::*, page_table::{PageTable, PageTableIndex}};
+use crate::structures::paging::{mapper::*, page_table::PageTable};
 
 /// A Mapper implementation that requires that the complete physical memory is mapped at some
 /// offset in the virtual address space.
@@ -340,7 +340,9 @@ impl<'a> OffsetPageTable5<'a> {
     pub unsafe fn new(level_5_table: &'a mut PageTable, phys_offset: VirtAddr) -> Self {
         Self {
             level_5_table,
-            phys_offset: PhysOffset5 { offset: phys_offset },
+            phys_offset: PhysOffset5 {
+                offset: phys_offset,
+            },
         }
     }
 
@@ -365,7 +367,9 @@ impl<'a> OffsetPageTable5<'a> {
         if p5_entry.is_unused() {
             return Err(TranslateError::PageNotMapped);
         }
-        let p4_frame = p5_entry.frame().map_err(|_| TranslateError::PageNotMapped)?;
+        let p4_frame = p5_entry
+            .frame()
+            .map_err(|_| TranslateError::PageNotMapped)?;
         let p4_ptr = self.phys_offset.frame_to_pointer(p4_frame);
         Ok(unsafe { &*p4_ptr })
     }
@@ -385,14 +389,18 @@ impl<'a> OffsetPageTable5<'a> {
 
         if p5_entry.is_unused() {
             // Allocate a new P4 table
-            let frame = allocator.allocate_frame().ok_or(MapToError::FrameAllocationFailed)?;
+            let frame = allocator
+                .allocate_frame()
+                .ok_or(MapToError::FrameAllocationFailed)?;
             p5_entry.set_frame(frame, parent_table_flags);
             // Zero out the new table
             let p4_ptr = self.phys_offset.frame_to_pointer(frame);
             unsafe { (*p4_ptr).zero() };
         }
 
-        let p4_frame = p5_entry.frame().map_err(|_| MapToError::ParentEntryHugePage)?;
+        let p4_frame = p5_entry
+            .frame()
+            .map_err(|_| MapToError::ParentEntryHugePage)?;
         let p4_ptr = self.phys_offset.frame_to_pointer(p4_frame);
         Ok(unsafe { &mut *p4_ptr })
     }
@@ -419,9 +427,17 @@ impl Mapper<Size4KiB> for OffsetPageTable5<'_> {
         unsafe { mapper.map_to_with_table_flags(page, frame, flags, parent_table_flags, allocator) }
     }
 
-    fn unmap(&mut self, page: Page<Size4KiB>) -> Result<(PhysFrame<Size4KiB>, MapperFlush<Size4KiB>), UnmapError> {
+    fn unmap(
+        &mut self,
+        page: Page<Size4KiB>,
+    ) -> Result<(PhysFrame<Size4KiB>, MapperFlush<Size4KiB>), UnmapError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| UnmapError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         mapper.unmap(page)
@@ -434,7 +450,12 @@ impl Mapper<Size4KiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlush<Size4KiB>, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.update_flags(page, flags) }
@@ -447,7 +468,12 @@ impl Mapper<Size4KiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p4_entry(page, flags) }
@@ -460,7 +486,12 @@ impl Mapper<Size4KiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p3_entry(page, flags) }
@@ -473,7 +504,12 @@ impl Mapper<Size4KiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p2_entry(page, flags) }
@@ -487,7 +523,9 @@ impl Mapper<Size4KiB> for OffsetPageTable5<'_> {
         if p4_entry.is_unused() {
             return Err(TranslateError::PageNotMapped);
         }
-        let p3_frame = p4_entry.frame().map_err(|_| TranslateError::ParentEntryHugePage)?;
+        let p3_frame = p4_entry
+            .frame()
+            .map_err(|_| TranslateError::ParentEntryHugePage)?;
         let p3 = unsafe { &*self.phys_offset.frame_to_pointer(p3_frame) };
 
         let p3_entry = &p3[page.start_address().p3_index()];
@@ -497,7 +535,9 @@ impl Mapper<Size4KiB> for OffsetPageTable5<'_> {
         if p3_entry.flags().contains(PageTableFlags::HUGE_PAGE) {
             return Err(TranslateError::ParentEntryHugePage);
         }
-        let p2_frame = p3_entry.frame().map_err(|_| TranslateError::ParentEntryHugePage)?;
+        let p2_frame = p3_entry
+            .frame()
+            .map_err(|_| TranslateError::ParentEntryHugePage)?;
         let p2 = unsafe { &*self.phys_offset.frame_to_pointer(p2_frame) };
 
         let p2_entry = &p2[page.start_address().p2_index()];
@@ -507,7 +547,9 @@ impl Mapper<Size4KiB> for OffsetPageTable5<'_> {
         if p2_entry.flags().contains(PageTableFlags::HUGE_PAGE) {
             return Err(TranslateError::ParentEntryHugePage);
         }
-        let p1_frame = p2_entry.frame().map_err(|_| TranslateError::ParentEntryHugePage)?;
+        let p1_frame = p2_entry
+            .frame()
+            .map_err(|_| TranslateError::ParentEntryHugePage)?;
         let p1 = unsafe { &*self.phys_offset.frame_to_pointer(p1_frame) };
 
         let p1_entry = &p1[page.start_address().p1_index()];
@@ -533,7 +575,8 @@ impl Mapper<Size2MiB> for OffsetPageTable5<'_> {
         A: FrameAllocator<Size4KiB> + ?Sized,
     {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, parent_table_flags, &mut UpcastAllocator(allocator))
+        let p4 = self
+            .get_or_create_p4(&page, parent_table_flags, &mut UpcastAllocator(allocator))
             .map_err(|e| match e {
                 MapToError::FrameAllocationFailed => MapToError::FrameAllocationFailed,
                 MapToError::ParentEntryHugePage => MapToError::ParentEntryHugePage,
@@ -543,9 +586,17 @@ impl Mapper<Size2MiB> for OffsetPageTable5<'_> {
         unsafe { mapper.map_to_with_table_flags(page, frame, flags, parent_table_flags, allocator) }
     }
 
-    fn unmap(&mut self, page: Page<Size2MiB>) -> Result<(PhysFrame<Size2MiB>, MapperFlush<Size2MiB>), UnmapError> {
+    fn unmap(
+        &mut self,
+        page: Page<Size2MiB>,
+    ) -> Result<(PhysFrame<Size2MiB>, MapperFlush<Size2MiB>), UnmapError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| UnmapError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         mapper.unmap(page)
@@ -558,7 +609,12 @@ impl Mapper<Size2MiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlush<Size2MiB>, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.update_flags(page, flags) }
@@ -571,7 +627,12 @@ impl Mapper<Size2MiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p4_entry(page, flags) }
@@ -584,7 +645,12 @@ impl Mapper<Size2MiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p3_entry(page, flags) }
@@ -597,7 +663,12 @@ impl Mapper<Size2MiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p2_entry(page, flags) }
@@ -611,7 +682,9 @@ impl Mapper<Size2MiB> for OffsetPageTable5<'_> {
         if p4_entry.is_unused() {
             return Err(TranslateError::PageNotMapped);
         }
-        let p3_frame = p4_entry.frame().map_err(|_| TranslateError::ParentEntryHugePage)?;
+        let p3_frame = p4_entry
+            .frame()
+            .map_err(|_| TranslateError::ParentEntryHugePage)?;
         let p3 = unsafe { &*self.phys_offset.frame_to_pointer(p3_frame) };
 
         let p3_entry = &p3[page.start_address().p3_index()];
@@ -621,7 +694,9 @@ impl Mapper<Size2MiB> for OffsetPageTable5<'_> {
         if p3_entry.flags().contains(PageTableFlags::HUGE_PAGE) {
             return Err(TranslateError::ParentEntryHugePage);
         }
-        let p2_frame = p3_entry.frame().map_err(|_| TranslateError::ParentEntryHugePage)?;
+        let p2_frame = p3_entry
+            .frame()
+            .map_err(|_| TranslateError::ParentEntryHugePage)?;
         let p2 = unsafe { &*self.phys_offset.frame_to_pointer(p2_frame) };
 
         let p2_entry = &p2[page.start_address().p2_index()];
@@ -650,7 +725,8 @@ impl Mapper<Size1GiB> for OffsetPageTable5<'_> {
         A: FrameAllocator<Size4KiB> + ?Sized,
     {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, parent_table_flags, &mut UpcastAllocator(allocator))
+        let p4 = self
+            .get_or_create_p4(&page, parent_table_flags, &mut UpcastAllocator(allocator))
             .map_err(|e| match e {
                 MapToError::FrameAllocationFailed => MapToError::FrameAllocationFailed,
                 MapToError::ParentEntryHugePage => MapToError::ParentEntryHugePage,
@@ -660,9 +736,17 @@ impl Mapper<Size1GiB> for OffsetPageTable5<'_> {
         unsafe { mapper.map_to_with_table_flags(page, frame, flags, parent_table_flags, allocator) }
     }
 
-    fn unmap(&mut self, page: Page<Size1GiB>) -> Result<(PhysFrame<Size1GiB>, MapperFlush<Size1GiB>), UnmapError> {
+    fn unmap(
+        &mut self,
+        page: Page<Size1GiB>,
+    ) -> Result<(PhysFrame<Size1GiB>, MapperFlush<Size1GiB>), UnmapError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| UnmapError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         mapper.unmap(page)
@@ -675,7 +759,12 @@ impl Mapper<Size1GiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlush<Size1GiB>, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.update_flags(page, flags) }
@@ -688,7 +777,12 @@ impl Mapper<Size1GiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p4_entry(page, flags) }
@@ -701,7 +795,12 @@ impl Mapper<Size1GiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p3_entry(page, flags) }
@@ -714,7 +813,12 @@ impl Mapper<Size1GiB> for OffsetPageTable5<'_> {
         flags: PageTableFlags,
     ) -> Result<MapperFlushAll, FlagUpdateError> {
         let phys_offset = self.phys_offset;
-        let p4 = self.get_or_create_p4(&page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut NoopAllocator)
+        let p4 = self
+            .get_or_create_p4(
+                &page,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                &mut NoopAllocator,
+            )
             .map_err(|_| FlagUpdateError::PageNotMapped)?;
         let mut mapper = unsafe { MappedPageTable::new(p4, phys_offset) };
         unsafe { mapper.set_flags_p2_entry(page, flags) }
@@ -728,7 +832,9 @@ impl Mapper<Size1GiB> for OffsetPageTable5<'_> {
         if p4_entry.is_unused() {
             return Err(TranslateError::PageNotMapped);
         }
-        let p3_frame = p4_entry.frame().map_err(|_| TranslateError::ParentEntryHugePage)?;
+        let p3_frame = p4_entry
+            .frame()
+            .map_err(|_| TranslateError::ParentEntryHugePage)?;
         let p3 = unsafe { &*self.phys_offset.frame_to_pointer(p3_frame) };
 
         let p3_entry = &p3[page.start_address().p3_index()];
@@ -831,7 +937,9 @@ impl Translate for OffsetPageTable5<'_> {
 // Helper struct for allocator upcasting
 struct UpcastAllocator<'a, A: FrameAllocator<Size4KiB> + ?Sized>(&'a mut A);
 
-unsafe impl<A: FrameAllocator<Size4KiB> + ?Sized> FrameAllocator<Size4KiB> for UpcastAllocator<'_, A> {
+unsafe impl<A: FrameAllocator<Size4KiB> + ?Sized> FrameAllocator<Size4KiB>
+    for UpcastAllocator<'_, A>
+{
     fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
         self.0.allocate_frame()
     }

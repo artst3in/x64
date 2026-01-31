@@ -8,9 +8,9 @@ use core::fmt;
 #[cfg(feature = "step_trait")]
 use core::iter::Step;
 use core::ops::{Add, AddAssign, Sub, SubAssign};
-use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "memory_encryption")]
 use core::sync::atomic::Ordering as MemOrdering;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(feature = "memory_encryption")]
 use crate::structures::mem_encrypt::ENC_BIT_MASK;
@@ -75,6 +75,8 @@ const fn canonicalize_48bit(addr: u64) -> u64 {
 }
 
 const ADDRESS_SPACE_SIZE: u64 = 0x1_0000_0000_0000;
+/// Address space size for 5-level paging (LA57): 128 PiB
+#[allow(dead_code)]
 const ADDRESS_SPACE_SIZE_LA57: u64 = 0x100_0000_0000_0000;
 
 /// A canonical 64-bit virtual memory address.
